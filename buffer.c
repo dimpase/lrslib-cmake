@@ -25,7 +25,6 @@ main(int argc, char *argv[])
         char *c;
         char *buffer [MAXBUFFER];
         int maxbuffer=500;
-        void *calloc();
 
         maxline=50000;
 /* allocate space for buffer */

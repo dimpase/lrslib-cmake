@@ -37,14 +37,10 @@ int usage(){ fprintf(stderr,"\n%s\n",rcsid);fprintf(stderr,DOCSTRING);  exit(1);
 #define CHECK_HELP   if (argc > 1 && argv[1][0]=='-' && argv[1][1]=='h') usage();
 
 
-int main(argc,argv)
-	 int argc;
-	 char **argv;
+int main(int argc, char **argv)
 {
   long int  m,n;
   int i,j;
-  
-  long atol();
   
     char  buf[BUFSIZ];
   
