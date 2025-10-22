@@ -8,7 +8,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # ============================================================
 option(BUILD_SHARED_LIBS "Build lrslib as shared library" ON)
 option(ENABLE_GMP "Enable GMP arbitrary-precision arithmetic" ON)
-option(ENABLE_MPI "Enable MPI and build mplrs executable" ON)
+option(ENABLE_MPI "Enable MPI and build mplrs executable" OFF)
 option(BUILD_DEMOS "Build demo/test programs" ON)
 option(USE_LRSARITH "Use built-in lrsarith multiple-precision back-end instead of GMP" OFF)
 
@@ -20,20 +20,75 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # ============================================================
 # Include and source setup
 # ============================================================
+
+
 set(LRSLIB_SRC_DIR ${PROJECT_SOURCE_DIR})
 set(LRSLIB_DEMO_DIR ${PROJECT_SOURCE_DIR}/demo)
 include_directories(${LRSLIB_SRC_DIR})
-file(GLOB LRSLIB_SOURCES
-     ${LRSLIB_SRC_DIR}/*.c
+
+file(GLOB ALL_C_SOURCES ${LRSLIB_SRC_DIR}/*.c)
+file(GLOB ARITH_SOURCES ${LRSARITH_DIR}/*.c)
+
+# rat2float seems to be unused, not in makefike
+list(FILTER ALL_C_SOURCES EXCLUDE REGEX ".*/rat2float\\.c$")
+
+# Remove MPI-related source files if MPI is disabled
+if(NOT ENABLE_MPI)
+    list(FILTER ALL_C_SOURCES EXCLUDE REGEX ".*/mplrs\\.c$")
+endif()
+
+# Exclude sources that define executables (contain main())
+set(EXCLUDE_PATTERNS
+    "${LRSLIB_SRC_DIR}/lrs.c"
+    "${LRSLIB_SRC_DIR}/mplrs.c"
+    "${LRSLIB_SRC_DIR}/2nash.c"
+    "${LRSLIB_SRC_DIR}/chdemo.c"
+    "${LRSLIB_SRC_DIR}/hvref.c"
+    "${LRSLIB_SRC_DIR}/inedel.c"
+    "${LRSLIB_SRC_DIR}/lpdemo.c"
+    "${LRSLIB_SRC_DIR}/lpdemo1.c"
+    "${LRSLIB_SRC_DIR}/lpdemo2.c"
+    "${LRSLIB_SRC_DIR}/lrsnash.c"
+    "${LRSLIB_SRC_DIR}/nashdemo.c"
+    "${LRSLIB_SRC_DIR}/polyv.c"
+    "${LRSLIB_SRC_DIR}/setupnash.c"
+    "${LRSLIB_SRC_DIR}/setupnash2.c"
+    "${LRSLIB_SRC_DIR}/vedemo.c"
+    "${LRSARITH_DIR}/coll.c"
+    "${LRSARITH_DIR}/fixed.c"
+    "${LRSARITH_DIR}/hybrid.c"
+    "${LRSARITH_DIR}/test.c"
 )
+
+set(LRSLIB_SOURCES ${ALL_C_SOURCES})
+list(APPEND LRSLIB_SOURCES ${ARITH_SOURCES})
+list(REMOVE_ITEM LRSLIB_SOURCES ${EXCLUDE_PATTERNS})
 
 # Core library
 add_library(lrslib ${LRSLIB_SOURCES})
+target_compile_definitions(lrslib PRIVATE SIGNALS)
 if(BUILD_SHARED_LIBS)
   set_target_properties(lrslib PROPERTIES
      VERSION ${PROJECT_VERSION}
      SOVERSION 1
   )
+endif()
+
+# Enable MPI if available
+
+if(ENABLE_MPI)
+    find_package(MPI QUIET)
+    if(MPI_FOUND)
+        message(STATUS "MPI found: ${MPI_C_INCLUDE_DIRS}")
+        target_include_directories(lrslib PRIVATE ${MPI_C_INCLUDE_DIRS})
+        target_link_libraries(lrslib PRIVATE ${MPI_C_LIBRARIES})
+        target_compile_definitions(lrslib PRIVATE HAVE_MPI)
+    else()
+        message(WARNING "MPI not found, but ENABLE_MPI=ON. Disabling MPI support.")
+	set(ENABLE_MPI OFF CACHE BOOL "Enable MPI support" FORCE)
+    endif()
+else()
+    message(STATUS "MPI disabled (ENABLE_MPI=OFF)")
 endif()
 
 # ============================================================
@@ -72,11 +127,12 @@ endif()
 # ============================================================
 # Executables
 # ============================================================
+
 add_executable(lrs ${LRSLIB_SRC_DIR}/lrs.c)
 target_link_libraries(lrs PRIVATE lrslib)
+target_include_directories(lrs PRIVATE ${LRSLIB_SRC_DIR} ${LRSARITH_DIR})
 
 if(ENABLE_MPI)
-  find_package(MPI REQUIRED)
   add_executable(mplrs ${LRSLIB_SRC_DIR}/mplrs.c)
   target_link_libraries(mplrs PRIVATE lrslib MPI::MPI_C)
   target_compile_definitions(mplrs PRIVATE USE_MPI)
