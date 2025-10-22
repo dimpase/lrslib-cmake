@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/../../lrslibTargets.cmake")
+
+set(LRSLIB_INCLUDE_DIRS "@CMAKE_INSTALL_PREFIX@/include/lrslib")
+set(LRSLIB_LIBRARIES lrslib)
+
+if(EXISTS "@CMAKE_INSTALL_PREFIX@/lib/liblrslib.so")
+  set(LRSLIB_LIBRARY "@CMAKE_INSTALL_PREFIX@/lib/liblrslib.so")
+endif()
+
