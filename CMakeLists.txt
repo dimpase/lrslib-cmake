@@ -10,6 +10,7 @@ option(BUILD_SHARED_LIBS "Build lrslib as shared library" ON)
 option(ENABLE_GMP "Enable GMP arbitrary-precision arithmetic" ON)
 option(ENABLE_MPI "Enable MPI and build mplrs executable" ON)
 option(BUILD_DEMOS "Build demo/test programs" ON)
+option(USE_LRSARITH "Use built-in lrsarith multiple-precision back-end instead of GMP" OFF)
 
 # Output directories
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -22,32 +23,50 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(LRSLIB_SRC_DIR ${PROJECT_SOURCE_DIR})
 set(LRSLIB_DEMO_DIR ${PROJECT_SOURCE_DIR}/demo)
 include_directories(${LRSLIB_SRC_DIR})
-
 file(GLOB LRSLIB_SOURCES
      ${LRSLIB_SRC_DIR}/*.c
-     ${LRSLIB_SRC_DIR}/*.h)
+)
 
-# ============================================================
 # Core library
-# ============================================================
 add_library(lrslib ${LRSLIB_SOURCES})
-
 if(BUILD_SHARED_LIBS)
   set_target_properties(lrslib PROPERTIES
-    VERSION ${PROJECT_VERSION}
-    SOVERSION 1)
+     VERSION ${PROJECT_VERSION}
+     SOVERSION 1
+  )
 endif()
 
 # ============================================================
-# GMP Support
+# Arithmetic backend selection
 # ============================================================
-find_package(GMP REQUIRED)   # or QUIET if optional
-if(GMP_FOUND)
-  target_include_directories(lrslib PRIVATE ${GMP_INCLUDE_DIRS})
-  target_link_libraries(lrslib PRIVATE gmp::gmp)
-  add_compile_definitions(USE_GMP)
-else()
-  message(WARNING "GMP not found — building without GMP support")
+set(LRSARITH_DIR "${PROJECT_SOURCE_DIR}/lrsarith-011")
+
+# Always add lrsarith include directory (contains lrsgmp.h and lrsmp.h)
+target_include_directories(lrslib PRIVATE ${LRSARITH_DIR})
+
+if(ENABLE_GMP AND NOT USE_LRSARITH)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(GMP_PKG QUIET gmp)
+  endif()
+
+  if(GMP_PKG_FOUND)
+    message(STATUS "Using GMP backend")
+    target_include_directories(lrslib PRIVATE ${GMP_PKG_INCLUDE_DIRS})
+    target_link_libraries(lrslib PRIVATE ${GMP_PKG_LIBRARIES})
+    target_compile_definitions(lrslib PRIVATE GMP)
+  else()
+    message(WARNING "GMP not found via pkg-config — falling back to built-in lrsarith")
+    set(USE_LRSARITH ON)
+  endif()
+endif()
+
+if(USE_LRSARITH)
+  message(STATUS "Using built-in lrsarith backend")
+  # Path to lrsarith-011 directory (adjust if necessary)
+  target_include_directories(lrslib PRIVATE ${PROJECT_SOURCE_DIR}/../lrsarith-011)
+  target_sources(lrslib PRIVATE ${PROJECT_SOURCE_DIR}/../lrsarith-011/lrsmp.c)
+  # target_compile_definitions(lrslib PRIVATE ARITH=\"lrsmp.h\")
 endif()
 
 # ============================================================
@@ -56,7 +75,6 @@ endif()
 add_executable(lrs ${LRSLIB_SRC_DIR}/lrs.c)
 target_link_libraries(lrs PRIVATE lrslib)
 
-# Optional: MPI version
 if(ENABLE_MPI)
   find_package(MPI REQUIRED)
   add_executable(mplrs ${LRSLIB_SRC_DIR}/mplrs.c)
@@ -80,23 +98,20 @@ endif()
 # Installation
 # ============================================================
 install(TARGETS lrslib lrs
-  RUNTIME DESTINATION bin
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib)
-
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib)
 if(ENABLE_MPI)
   install(TARGETS mplrs RUNTIME DESTINATION bin)
 endif()
-
 if(BUILD_DEMOS)
   install(DIRECTORY ${LRSLIB_DEMO_DIR}/
-    DESTINATION share/lrslib/demos
-    FILES_MATCHING PATTERN "*.c")
+          DESTINATION share/lrslib/demos
+          FILES_MATCHING PATTERN "*.c")
 endif()
-
 install(DIRECTORY ${LRSLIB_SRC_DIR}/
-  DESTINATION include/lrslib
-  FILES_MATCHING PATTERN "*.h")
+        DESTINATION include/lrslib
+        FILES_MATCHING PATTERN "*.h")
 
 # ============================================================
 # CMake package config
@@ -107,7 +122,6 @@ configure_package_config_file(
   ${CMAKE_CURRENT_BINARY_DIR}/lrslibConfig.cmake
   INSTALL_DESTINATION lib/cmake/lrslib
 )
-
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/lrslibConfig.cmake
   DESTINATION lib/cmake/lrslib)
@@ -117,10 +131,11 @@ install(FILES
 # ============================================================
 message(STATUS "")
 message(STATUS "========== lrslib build configuration ==========")
-message(STATUS "Build shared libs  : ${BUILD_SHARED_LIBS}")
-message(STATUS "GMP support         : ${ENABLE_GMP}")
-message(STATUS "MPI support         : ${ENABLE_MPI}")
-message(STATUS "Build demos         : ${BUILD_DEMOS}")
+message(STATUS "Build shared libs : ${BUILD_SHARED_LIBS}")
+message(STATUS "Using GMP backend : ${ENABLE_GMP}")
+message(STATUS "Using built-in lrsarith: ${USE_LRSARITH}")
+message(STATUS "MPI support       : ${ENABLE_MPI}")
+message(STATUS "Build demos       : ${BUILD_DEMOS}")
 message(STATUS "=================================================")
 message(STATUS "")
 
